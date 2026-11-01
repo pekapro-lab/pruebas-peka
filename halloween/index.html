@@ -1,0 +1,21 @@
+<!doctype html><html lang=es><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content=noindex><title>PekaHalloween (prueba)</title>
+<body style="font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+<form id=f style="text-align:center"><h2>🔒 PekaHalloween (prueba)</h2><input id=p type=password autocomplete=current-password placeholder="Contraseña" style="font-size:18px;padding:10px;width:240px"><br><br>
+<button style="font-size:18px;padding:10px 24px">Entrar</button><p id=m style="color:#f66"></p></form>
+<script>
+const M=document.getElementById('m');
+f.onsubmit=async e=>{e.preventDefault();M.style.color='#aaa';M.textContent='Abriendo…';
+try{if(!('serviceWorker' in navigator)||!crypto.subtle)throw new Error('Navegador sin soporte (usa https y un navegador actual)');
+const b=new Uint8Array(await (await fetch('bundle.enc',{cache:'no-store'})).arrayBuffer());
+const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(p.value.trim()),'PBKDF2',false,['deriveKey']);
+const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b.slice(0,16),iterations:310000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
+let pt;try{pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(16,28)},key,b.slice(28))}catch(_){M.style.color='#f66';M.textContent='Contraseña incorrecta';return}
+const files=JSON.parse(new TextDecoder().decode(pt));
+const T={html:'text/html',js:'text/javascript',css:'text/css',png:'image/png',webp:'image/webp',json:'application/json',svg:'image/svg+xml',jpg:'image/jpeg',mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',wasm:'application/wasm'};
+const c=await caches.open('pruebas-v1'),base=new URL('./',location.href).href;
+for(const k of await c.keys())if(k.url.startsWith(base))await c.delete(k);
+for(const [n,d] of Object.entries(files)){const raw=Uint8Array.from(atob(d),ch=>ch.charCodeAt(0));
+ await c.put(base+n,new Response(raw,{headers:{'Content-Type':T[n.split('.').pop()]||'application/octet-stream'}}));}
+await navigator.serviceWorker.register('/pruebas-peka/sw.js',{scope:'/pruebas-peka/'});await navigator.serviceWorker.ready;
+location.replace(base+'?t='+Date.now());}catch(err){M.style.color='#f66';M.textContent='Error: '+err.message}};
+</script>
