@@ -1,21 +1,53 @@
 <!doctype html><html lang=es><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content=noindex><title>CochesAI (prueba)</title>
 <body style="font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
-<form id=f style="text-align:center"><h2>🔒 CochesAI (prueba)</h2><input id=p type=password autocomplete=current-password placeholder="Contraseña" style="font-size:18px;padding:10px;width:240px"><br><br>
-<button style="font-size:18px;padding:10px 24px">Entrar</button><p id=m style="color:#f66"></p></form>
+<form id=f style="text-align:center;padding:16px"><h2>🔒 CochesAI (prueba)</h2><input id=p type=password autocomplete=current-password placeholder="Contraseña" style="font-size:18px;padding:10px;width:240px"><br><br>
+<button style="font-size:18px;padding:10px 24px">Entrar</button><p id=m style="color:#f66;max-width:340px;margin:12px auto"></p></form>
 <script>
-const M=document.getElementById('m');
-f.onsubmit=async e=>{e.preventDefault();M.style.color='#aaa';M.textContent='Abriendo…';
-try{if(!('serviceWorker' in navigator)||!crypto.subtle)throw new Error('Navegador sin soporte (usa https y un navegador actual)');
-const b=new Uint8Array(await (await fetch('bundle.enc',{cache:'no-store'})).arrayBuffer());
-const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(p.value.trim()),'PBKDF2',false,['deriveKey']);
-const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b.slice(0,16),iterations:310000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
-let pt;try{pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(16,28)},key,b.slice(28))}catch(_){M.style.color='#f66';M.textContent='Contraseña incorrecta';return}
-const files=JSON.parse(new TextDecoder().decode(pt));
-const T={html:'text/html',js:'text/javascript',css:'text/css',png:'image/png',webp:'image/webp',json:'application/json',svg:'image/svg+xml',jpg:'image/jpeg',mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',wasm:'application/wasm'};
-const c=await caches.open('pruebas-v1'),base=new URL('./',location.href).href;
-for(const k of await c.keys())if(k.url.startsWith(base))await c.delete(k);
-for(const [n,d] of Object.entries(files)){const raw=Uint8Array.from(atob(d),ch=>ch.charCodeAt(0));
- await c.put(base+n,new Response(raw,{headers:{'Content-Type':T[n.split('.').pop()]||'application/octet-stream'}}));}
-await navigator.serviceWorker.register('/pruebas-peka/sw.js',{scope:'/pruebas-peka/'});await navigator.serviceWorker.ready;
-location.replace(base+'?t='+Date.now());}catch(err){M.style.color='#f66';M.textContent='Error: '+err.message}};
+var M=document.getElementById('m'),F=document.getElementById('f'),P=document.getElementById('p');
+var T={html:'text/html',js:'text/javascript',mjs:'text/javascript',css:'text/css',png:'image/png',webp:'image/webp',json:'application/json',svg:'image/svg+xml',jpg:'image/jpeg',jpeg:'image/jpeg',mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',wasm:'application/wasm'};
+var subtle=window.crypto&&(crypto.subtle||crypto.webkitSubtle);
+if(!subtle){M.textContent='Este navegador no permite descifrar la prueba (falta crypto.subtle). Ábrela en Safari o Chrome normales, por https.';}
+function b64(d){var s=atob(d),a=new Uint8Array(s.length);for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a;}
+function mime(n){return T[n.split('.').pop().toLowerCase()]||'application/octet-stream';}
+async function viaSW(files,base){
+  var c=await caches.open('pruebas-v1');var ks=await c.keys();for(var k of ks)if(k.url.indexOf(base)===0)await c.delete(k);
+  for(var n in files)await c.put(base+n,new Response(b64(files[n]),{headers:{'Content-Type':mime(n)}}));
+  await navigator.serviceWorker.register('/pruebas-peka/sw.js',{scope:'/pruebas-peka/'});
+  await Promise.race([navigator.serviceWorker.ready,new Promise(function(_,r){setTimeout(function(){r(new Error('sw timeout'))},8000)})]);
+  location.replace(base+'?t='+Date.now());}
+// Sin service worker (Safari privado, Modo Aislamiento…): descifra y carga en la propia página con URLs blob
+function inPage(files,base){
+  var path=new URL(base).pathname,map={},url={};
+  var names=Object.keys(files).sort(function(a,b){return b.length-a.length});
+  names.forEach(function(n){if(!/\.(html|js|mjs|css)$/.test(n))url[n]=URL.createObjectURL(new Blob([b64(files[n])],{type:mime(n)}));});
+  function rw(t){names.forEach(function(n){if(url[n])t=t.split(path+n).join(url[n]);});return t;}
+  // los JS/CSS se crean en orden: primero los que no citan a otros
+  var text={};names.forEach(function(n){if(!url[n]&&n!=='index.html')text[n]=new TextDecoder().decode(b64(files[n]));});
+  for(var pass=0;pass<6;pass++)Object.keys(text).forEach(function(n){if(url[n])return;var t=rw(text[n]);
+    var pend=Object.keys(text).some(function(o){return o!==n&&!url[o]&&t.indexOf(path+o)>=0;});if(!pend||pass===5)url[n]=URL.createObjectURL(new Blob([t],{type:mime(n)}));});
+  function map1(u){try{var a=new URL(u,location.href);if(a.origin===location.origin&&a.pathname.indexOf(path)===0){var r=a.pathname.slice(path.length);if(url[r])return url[r];}}catch(e){}return u;}
+  window.__pkmap=map1;
+  var d=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');Object.defineProperty(HTMLImageElement.prototype,'src',{get:d.get,set:function(v){d.set.call(this,map1(String(v)))},configurable:true});
+  var md=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'src');Object.defineProperty(HTMLMediaElement.prototype,'src',{get:md.get,set:function(v){md.set.call(this,map1(String(v)))},configurable:true});
+  var of=window.fetch;window.fetch=function(i,o){return of.call(this,typeof i==='string'||i instanceof URL?map1(String(i)):i,o);};
+  var ox=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=map1(String(u));return ox.apply(this,arguments);};
+  var OW=window.Worker;if(OW)window.Worker=function(u,o){return new OW(map1(String(u)),o);};
+  var html=rw(new TextDecoder().decode(b64(files['index.html'])));
+  var doc=new DOMParser().parseFromString(html,'text/html');
+  document.head.innerHTML='';document.body.innerHTML='';document.body.removeAttribute('style');
+  Array.prototype.forEach.call(doc.documentElement.attributes,function(a){document.documentElement.setAttribute(a.name,a.value);});
+  var scripts=[];
+  function adopt(src,dst){Array.prototype.slice.call(src.childNodes).forEach(function(n){if(n.nodeName==='SCRIPT'){scripts.push([n,dst]);}else dst.appendChild(document.importNode(n,true));});}
+  adopt(doc.head,document.head);adopt(doc.body,document.body);
+  scripts.forEach(function(p){var s=document.createElement('script');Array.prototype.forEach.call(p[0].attributes,function(a){s.setAttribute(a.name,a.value);});s.text=p[0].text;p[1].appendChild(s);});
+  setTimeout(function(){window.dispatchEvent(new Event('resize'));},300);}
+F.onsubmit=async function(e){e.preventDefault();if(!subtle)return;M.style.color='#aaa';M.textContent='Abriendo…';
+try{var b=new Uint8Array(await (await fetch('bundle.enc',{cache:'no-store'})).arrayBuffer());
+var km=await subtle.importKey('raw',new TextEncoder().encode(P.value.trim()),'PBKDF2',false,['deriveKey']);
+var key=await subtle.deriveKey({name:'PBKDF2',salt:b.slice(0,16),iterations:310000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
+var pt;try{pt=await subtle.decrypt({name:'AES-GCM',iv:b.slice(16,28)},key,b.slice(28))}catch(_){M.style.color='#f66';M.textContent='Contraseña incorrecta';return}
+var files=JSON.parse(new TextDecoder().decode(pt)),base=new URL('./',location.href).href;
+var forceInPage=/[?&]inpage/.test(location.search);
+if(!forceInPage&&'serviceWorker' in navigator&&window.caches){try{await viaSW(files,base);return;}catch(err){console.warn('SW no disponible, modo en página',err);}}
+inPage(files,base);}catch(err){M.style.color='#f66';M.textContent='No se pudo abrir la prueba en este navegador ('+(err&&err.message||err)+'). Prueba en Safari o Chrome normales, fuera del modo privado.';}};
 </script>
