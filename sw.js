@@ -1,14 +1,15 @@
-// v3: el juego descifrado se sirve desde caché solo si coincide con la última versión publicada
+// v4: TODAS las pruebas (cualquier carpeta) pasan por contraseña y comprobación de versión; antes realista/ y cyberpek/ se servían de la caché vieja
 const C='pruebas-v1';
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const k of await caches.keys())if(k!==C)await caches.delete(k);await self.clients.claim();})()));
-const GAMES=/^\/pruebas-peka\/(cubos|coches|halloween)\//;
+const GAMES=/^\/pruebas-peka\/([a-z0-9_-]+)\//;
 async function latest(base){try{const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),4000);
   const r=await fetch(base+'bundle.enc?v='+Date.now(),{method:'HEAD',cache:'no-store',signal:ctl.signal});clearTimeout(t);return r.ok?(r.headers.get('etag')||r.headers.get('last-modified')||''):null;}catch(e){return null;}}
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url); if(u.origin!==location.origin||e.request.method!=='GET')return;
  const m=u.pathname.match(GAMES);
  // la contraseña y el propio cifrado siempre de la red
  if(u.pathname.endsWith('/bundle.enc'))return;
+ if(u.pathname.endsWith('/sw.js'))return;
  e.respondWith((async()=>{const c=await caches.open(C);
   if(e.request.mode==='navigate'&&m){const base=u.origin+'/pruebas-peka/'+m[1]+'/';
     // sin ?t= es la pantalla de contraseña: siempre de la red
